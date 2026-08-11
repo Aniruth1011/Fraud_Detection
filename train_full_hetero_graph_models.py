@@ -209,6 +209,11 @@ def save_json(payload: dict, output_path: Path) -> None:
     output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def save_model_checkpoint(payload: dict, output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(payload, output_path)
+
+
 def evaluate_relation(model, data: HeteroData, relation, edge_indices: np.ndarray, config: dict, device):
     loader = build_relation_loader(data, relation, edge_indices, config, shuffle=False)
     model.eval()
@@ -260,6 +265,7 @@ def train_relation_model(relation, relation_frame: pd.DataFrame, data: HeteroDat
     train_loader = build_relation_loader(data, relation, split_indices["train"], config, shuffle=True)
     best_state = None
     best_val_f1 = -1.0
+    checkpoint_every_epochs = int(config.get("checkpoint_every_epochs", 2))
 
     for epoch in range(config["epochs"]):
         model.train()
@@ -294,6 +300,20 @@ def train_relation_model(relation, relation_frame: pd.DataFrame, data: HeteroDat
             val_metrics["f1"],
             val_metrics["pr_auc"],
         )
+        if checkpoint_every_epochs > 0 and (epoch + 1) % checkpoint_every_epochs == 0:
+            checkpoint_path = model_dir / f"checkpoint_epoch_{epoch + 1:03d}.pt"
+            save_model_checkpoint(
+                {
+                    "relation": relation,
+                    "epoch": epoch + 1,
+                    "state_dict": {key: value.detach().cpu() for key, value in model.state_dict().items()},
+                    "config": config,
+                    "validation_metrics": val_metrics,
+                },
+                checkpoint_path,
+            )
+            logger.info("saved checkpoint=%s", checkpoint_path)
+
         if val_metrics["f1"] > best_val_f1:
             best_val_f1 = val_metrics["f1"]
             best_state = copy.deepcopy(model.state_dict())
