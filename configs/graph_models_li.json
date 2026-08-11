@@ -1,0 +1,39 @@
+{
+  "experiment_name": "li_graph_models",
+  "transactions_path": "data/LI/generated_transactions.csv",
+  "nodes_path": "data/LI/generated_nodes.csv",
+  "output_root": "outputs/graph_models)chumma",
+  "processed_graph_path": "outputs/graph_models/li_graph_models/processed/base_graph.pt",
+  "batch_size": 2048,
+  "num_neighbors": [
+    100,
+    100 
+  ],
+  "epochs": 20,
+  "learning_rate": 0.001,
+  "weight_decay": 0.0001,
+  "hidden_dim": 64,
+  "num_layers": 2,
+  "edge_updates": true,
+  "dropout": 0.2,
+  "final_dropout": 0.5,
+  "positive_class_weight": 20.0,
+  "use_ports": true,
+  "use_time_deltas": true,
+  "use_reverse_mp": true,
+  "models": {
+    "gin": {
+      "enabled": true
+    },
+    "gat": {
+      "enabled": true,
+      "heads": 4
+    },
+    "pna": {
+      "enabled": true
+    },
+    "rgcn": {
+      "enabled": true
+    }
+  }
+}

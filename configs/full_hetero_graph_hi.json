@@ -1,0 +1,17 @@
+{
+  "experiment_name": "hi_full_hetero_graph",
+  "transactions_path": "data/HI/generated_transactions.csv",
+  "nodes_path": "data/HI/generated_nodes.csv",
+  "output_root": "outputs/full_hetero_graph_models",
+  "processed_full_hetero_graph_path": "outputs/full_hetero_graph_models/hi_full_hetero_graph/processed/full_hetero_graph.pt",
+  "batch_size": 1024,
+  "num_neighbors": 64,
+  "epochs": 20,
+  "learning_rate": 0.001,
+  "weight_decay": 0.0001,
+  "hidden_dim": 128,
+  "num_layers": 2,
+  "dropout": 0.2,
+  "final_dropout": 0.3,
+  "positive_class_weight": 12.0
+}

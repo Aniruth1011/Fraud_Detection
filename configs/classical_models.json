@@ -1,0 +1,81 @@
+{
+  "experiment_name": "li_classical_tabular",
+  "transactions_path": "data/LI/generated_transactions.csv",
+  "nodes_path": "data/LI/generated_nodes.csv",
+  "output_root": "outputs/classical_models",
+  "processed_data_path": "outputs/classical_models/li_classical_tabular/processed/features.pkl",
+  "processed_target_path": "outputs/classical_models/li_classical_tabular/processed/target.pkl",
+  "processed_keys_path": "outputs/classical_models/li_classical_tabular/processed/keys.pkl",
+  "train_fraction": 0.7,
+  "validation_fraction": 0.15,
+  "experiments": [
+    {
+      "name": "li_classical_tabular",
+      "drop_leakage_features": false
+    },
+    {
+      "name": "li_classical_tabular_no_leakage",
+      "drop_leakage_features": true
+    }
+  ],
+  "models": {
+    "logistic_regression": {
+      "enabled": true,
+      "type": "supervised",
+      "params": {
+        "C": 1.0,
+        "class_weight": "balanced",
+        "max_iter": 1000,
+        "n_jobs": -1,
+        "solver": "saga"
+      }
+    },
+    "random_forest": {
+      "enabled": true,
+      "type": "supervised",
+      "params": {
+        "class_weight": "balanced_subsample",
+        "max_depth": null,
+        "min_samples_leaf": 2,
+        "n_estimators": 300,
+        "n_jobs": -1,
+        "random_state": 42
+      }
+    },
+    "xgboost": {
+      "enabled": true,
+      "type": "supervised",
+      "params": {
+        "colsample_bytree": 0.8,
+        "eval_metric": "logloss",
+        "learning_rate": 0.05,
+        "max_depth": 6,
+        "n_estimators": 400,
+        "random_state": 42,
+        "subsample": 0.8,
+        "tree_method": "hist"
+      }
+    },
+    "isolation_forest": {
+      "enabled": true,
+      "type": "unsupervised",
+      "params": {
+        "contamination": "auto",
+        "max_samples": "auto",
+        "n_estimators": 300,
+        "n_jobs": -1,
+        "random_state": 42
+      }
+    },
+    "local_outlier_factor": {
+      "enabled": true,
+      "type": "unsupervised",
+      "params": {
+        "contamination": "auto",
+        "metric": "minkowski",
+        "n_neighbors": 35,
+        "novelty": true
+      }
+    }
+  }
+}
