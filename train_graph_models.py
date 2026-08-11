@@ -48,6 +48,17 @@ def parse_args() -> argparse.Namespace:
         default="configs/graph_models_li.json",
         help="Path to the graph-model JSON config.",
     )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        help="Override batch_size from the JSON config.",
+    )
+    parser.add_argument(
+        "--num-neighbors",
+        type=int,
+        nargs="+",
+        help="Override num_neighbors from the JSON config, e.g. --num-neighbors 10 10.",
+    )
     return parser.parse_args()
 
 
@@ -1196,6 +1207,10 @@ def train_one_model(model_name: str, config: dict, train_data, val_data, test_da
 def main() -> None:
     args = parse_args()
     config = read_config(args.config)
+    if args.batch_size is not None:
+        config["batch_size"] = args.batch_size
+    if args.num_neighbors is not None:
+        config["num_neighbors"] = args.num_neighbors
     train_data, val_data, test_data, train_idx, val_idx, test_idx, transactions = build_datasets(config)
     for model_name, model_config in config["models"].items():
         if model_config.get("enabled", True):
