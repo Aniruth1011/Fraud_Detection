@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+from contextlib import nullcontext
 from pathlib import Path
 
 import joblib
@@ -25,7 +26,7 @@ from torch_geometric.data import HeteroData
 from torch_geometric.loader import LinkNeighborLoader
 from torch_geometric.nn import HeteroConv, Linear, SAGEConv
 
-from train_graph_models import load_or_build_full_hetero_graph, read_config, setup_logger
+from train_graph_models import autocast_settings, load_or_build_full_hetero_graph, read_config, setup_logger
 
 
 def parse_args() -> argparse.Namespace:
@@ -216,7 +217,7 @@ def evaluate_relation(model, data: HeteroData, relation, edge_indices: np.ndarra
     truth = []
     with torch.no_grad():
         for batch in loader:
-            batch = batch.to(device)
+            batch = batch.to(device, non_blocking=True)
             logits = model(batch, relation)
             pred = logits.argmax(dim=-1)
             prob = torch.softmax(logits, dim=-1)[:, 1]
@@ -252,6 +253,9 @@ def train_relation_model(relation, relation_frame: pd.DataFrame, data: HeteroDat
     loss_fn = nn.CrossEntropyLoss(
         weight=torch.tensor([1.0, float(config["positive_class_weight"])], dtype=torch.float32, device=device)
     )
+    amp_enabled, amp_dtype = autocast_settings(device)
+    scaler = torch.cuda.amp.GradScaler(enabled=amp_enabled and amp_dtype == torch.float16)
+    logger.info("Mixed precision enabled=%s dtype=%s", amp_enabled, amp_dtype)
 
     train_loader = build_relation_loader(data, relation, split_indices["train"], config, shuffle=True)
     best_state = None
@@ -259,17 +263,24 @@ def train_relation_model(relation, relation_frame: pd.DataFrame, data: HeteroDat
 
     for epoch in range(config["epochs"]):
         model.train()
-        total_loss = 0.0
+        total_loss = torch.zeros((), device=device)
         total_examples = 0
         for batch in train_loader:
-            batch = batch.to(device)
-            optimizer.zero_grad()
-            logits = model(batch, relation)
-            target = batch[relation].edge_label
-            loss = loss_fn(logits, target)
-            loss.backward()
-            optimizer.step()
-            total_loss += float(loss) * target.numel()
+            batch = batch.to(device, non_blocking=True)
+            optimizer.zero_grad(set_to_none=True)
+            context = torch.autocast("cuda", dtype=amp_dtype) if amp_enabled else nullcontext()
+            with context:
+                logits = model(batch, relation)
+                target = batch[relation].edge_label
+                loss = loss_fn(logits, target)
+            if scaler.is_enabled():
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                loss.backward()
+                optimizer.step()
+            total_loss += loss.detach() * target.numel()
             total_examples += target.numel()
 
         y_true, y_pred, y_prob = evaluate_relation(
@@ -279,7 +290,7 @@ def train_relation_model(relation, relation_frame: pd.DataFrame, data: HeteroDat
         logger.info(
             "epoch=%s loss=%.6f val_f1=%.6f val_pr_auc=%.6f",
             epoch + 1,
-            total_loss / max(total_examples, 1),
+            float((total_loss / max(total_examples, 1)).detach().cpu()),
             val_metrics["f1"],
             val_metrics["pr_auc"],
         )

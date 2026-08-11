@@ -5,6 +5,7 @@ import itertools
 import json
 import logging
 import time
+from contextlib import nullcontext
 from pathlib import Path
 
 import joblib
@@ -601,6 +602,13 @@ def build_datasets(config: dict):
 def build_loaders(train_data, val_data, test_data, train_idx, val_idx, test_idx, config: dict):
     num_neighbors = config["num_neighbors"]
     batch_size = config["batch_size"]
+    num_workers = int(config.get("num_workers", 2))
+    loader_kwargs = {
+        "num_workers": num_workers,
+        "pin_memory": torch.cuda.is_available(),
+    }
+    if num_workers > 0:
+        loader_kwargs["persistent_workers"] = True
 
     if isinstance(train_data, HeteroData):
         train_loader = LinkNeighborLoader(
@@ -610,6 +618,7 @@ def build_loaders(train_data, val_data, test_data, train_idx, val_idx, test_idx,
             edge_label=train_data[FORWARD_RELATION].y,
             batch_size=batch_size,
             shuffle=True,
+            **loader_kwargs,
         )
         val_loader = LinkNeighborLoader(
             data=val_data,
@@ -618,6 +627,7 @@ def build_loaders(train_data, val_data, test_data, train_idx, val_idx, test_idx,
             edge_label=val_data[FORWARD_RELATION].y[len(train_idx) :],
             batch_size=batch_size,
             shuffle=False,
+            **loader_kwargs,
         )
         test_loader = LinkNeighborLoader(
             data=test_data,
@@ -626,6 +636,7 @@ def build_loaders(train_data, val_data, test_data, train_idx, val_idx, test_idx,
             edge_label=test_data[FORWARD_RELATION].y[test_idx],
             batch_size=batch_size,
             shuffle=False,
+            **loader_kwargs,
         )
     else:
         train_loader = LinkNeighborLoader(
@@ -635,6 +646,7 @@ def build_loaders(train_data, val_data, test_data, train_idx, val_idx, test_idx,
             edge_label=train_data.y,
             batch_size=batch_size,
             shuffle=True,
+            **loader_kwargs,
         )
         val_loader = LinkNeighborLoader(
             data=val_data,
@@ -643,6 +655,7 @@ def build_loaders(train_data, val_data, test_data, train_idx, val_idx, test_idx,
             edge_label=val_data.y[len(train_idx) :],
             batch_size=batch_size,
             shuffle=False,
+            **loader_kwargs,
         )
         test_loader = LinkNeighborLoader(
             data=test_data,
@@ -651,6 +664,7 @@ def build_loaders(train_data, val_data, test_data, train_idx, val_idx, test_idx,
             edge_label=test_data.y[test_idx],
             batch_size=batch_size,
             shuffle=False,
+            **loader_kwargs,
         )
     return train_loader, val_loader, test_loader
 
@@ -974,16 +988,40 @@ def append_rgcn_relation(sample_data):
         sample_data.edge_attr = torch.cat([sample_data.edge_attr, relation_type], dim=1)
 
 
-def mask_seed_edges_homo(batch, loader_data_edge_attr, split_indices: np.ndarray) -> torch.Tensor:
-    batch_edge_indices = split_indices[batch.input_id.detach().cpu().numpy()]
-    batch_edge_uids = loader_data_edge_attr[batch_edge_indices, 0].detach().cpu()
-    return torch.isin(batch.edge_attr[:, 0].detach().cpu(), batch_edge_uids)
+def mask_seed_edges_homo(batch, loader_edge_uid: torch.Tensor, split_indices: torch.Tensor) -> torch.Tensor:
+    batch_edge_indices = split_indices[batch.input_id.long()]
+    if hasattr(batch, "e_id"):
+        return torch.isin(batch.e_id.long(), batch_edge_indices, assume_unique=True)
+    batch_edge_uids = loader_edge_uid[batch_edge_indices]
+    return torch.isin(batch.edge_attr[:, 0].long(), batch_edge_uids, assume_unique=True)
 
 
-def mask_seed_edges_hetero(batch, loader_data_edge_attr, split_indices: np.ndarray) -> torch.Tensor:
-    batch_edge_indices = split_indices[batch[FORWARD_RELATION].input_id.detach().cpu().numpy()]
-    batch_edge_uids = loader_data_edge_attr[batch_edge_indices, 0].detach().cpu()
-    return torch.isin(batch[FORWARD_RELATION].edge_attr[:, 0].detach().cpu(), batch_edge_uids)
+def mask_seed_edges_hetero(batch, loader_edge_uid: torch.Tensor, split_indices: torch.Tensor) -> torch.Tensor:
+    batch_edge_indices = split_indices[batch[FORWARD_RELATION].input_id.long()]
+    if "e_id" in batch[FORWARD_RELATION]:
+        return torch.isin(
+            batch[FORWARD_RELATION].e_id.long(),
+            batch_edge_indices,
+            assume_unique=True,
+        )
+    batch_edge_uids = loader_edge_uid[batch_edge_indices]
+    return torch.isin(batch[FORWARD_RELATION].edge_attr[:, 0].long(), batch_edge_uids, assume_unique=True)
+
+
+def autocast_settings(device: torch.device) -> tuple[bool, torch.dtype | None]:
+    if device.type != "cuda":
+        return False, None
+    if torch.cuda.is_bf16_supported():
+        return True, torch.bfloat16
+    return True, torch.float16
+
+
+def count_batch_nodes_edges(batch) -> tuple[int, int]:
+    if isinstance(batch, HeteroData):
+        node_count = sum(store.x.shape[0] for store in batch.node_stores if "x" in store)
+        edge_count = sum(store.edge_index.shape[1] for store in batch.edge_stores if "edge_index" in store)
+        return int(node_count), int(edge_count)
+    return int(batch.x.shape[0]), int(batch.edge_index.shape[1])
 
 
 def evaluate_homo(model, loader, split_indices: np.ndarray, device):
@@ -992,15 +1030,17 @@ def evaluate_homo(model, loader, split_indices: np.ndarray, device):
     probs = []
     truth = []
     uids = []
+    split_indices = torch.as_tensor(split_indices, dtype=torch.long, device=device)
+    loader_edge_uid = loader.data.edge_attr[:, 0].long().to(device, non_blocking=True)
     with torch.no_grad():
         for batch in loader:
-            mask = mask_seed_edges_homo(batch, loader.data.edge_attr, split_indices)
+            batch = batch.to(device, non_blocking=True)
+            mask = mask_seed_edges_homo(batch, loader_edge_uid, split_indices)
             edge_uids = batch.edge_attr[mask, 0].detach().cpu().numpy().astype(np.int64)
-            batch = batch.to(device)
             batch.edge_attr = batch.edge_attr[:, 1:]
             logits = model(batch.x, batch.edge_index, batch.edge_attr)
-            masked_logits = logits[mask.to(device)]
-            masked_truth = batch.y[mask.to(device)]
+            masked_logits = logits[mask]
+            masked_truth = batch.y[mask]
             preds.append(masked_logits.argmax(dim=-1).detach().cpu())
             probs.append(torch.softmax(masked_logits, dim=-1)[:, 1].detach().cpu())
             truth.append(masked_truth.detach().cpu())
@@ -1018,17 +1058,19 @@ def evaluate_hetero(model, loader, split_indices: np.ndarray, device):
     probs = []
     truth = []
     uids = []
+    split_indices = torch.as_tensor(split_indices, dtype=torch.long, device=device)
+    loader_edge_uid = loader.data[FORWARD_RELATION].edge_attr[:, 0].long().to(device, non_blocking=True)
     with torch.no_grad():
         for batch in loader:
-            mask = mask_seed_edges_hetero(batch, loader.data[FORWARD_RELATION].edge_attr, split_indices)
+            batch = batch.to(device, non_blocking=True)
+            mask = mask_seed_edges_hetero(batch, loader_edge_uid, split_indices)
             edge_uids = batch[FORWARD_RELATION].edge_attr[mask, 0].detach().cpu().numpy().astype(np.int64)
-            batch = batch.to(device)
             batch[FORWARD_RELATION].edge_attr = batch[FORWARD_RELATION].edge_attr[:, 1:]
             batch[REVERSE_RELATION].edge_attr = batch[REVERSE_RELATION].edge_attr[:, 1:]
             logits_dict = model(batch.x_dict, batch.edge_index_dict, batch.edge_attr_dict)
             logits = logits_dict[FORWARD_RELATION]
-            masked_logits = logits[mask.to(device)]
-            masked_truth = batch[FORWARD_RELATION].y[mask.to(device)]
+            masked_logits = logits[mask]
+            masked_truth = batch[FORWARD_RELATION].y[mask]
             preds.append(masked_logits.argmax(dim=-1).detach().cpu())
             probs.append(torch.softmax(masked_logits, dim=-1)[:, 1].detach().cpu())
             truth.append(masked_truth.detach().cpu())
@@ -1089,10 +1131,13 @@ def train_one_model(model_name: str, config: dict, train_data, val_data, test_da
     logger.info("Building LinkNeighborLoader objects")
     train_loader, val_loader, test_loader = build_loaders(train_data, val_data, test_data, train_idx, val_idx, test_idx, config)
     logger.info(
-        "Built loaders train_batches=%s validation_batches=%s test_batches=%s",
+        "Built loaders train_batches=%s validation_batches=%s test_batches=%s batch_size=%s num_neighbors=%s num_workers=%s",
         len(train_loader),
         len(val_loader),
         len(test_loader),
+        config["batch_size"],
+        config["num_neighbors"],
+        int(config.get("num_workers", 2)),
     )
 
     sample_data = train_data
@@ -1109,6 +1154,14 @@ def train_one_model(model_name: str, config: dict, train_data, val_data, test_da
     loss_fn = nn.CrossEntropyLoss(
         weight=torch.tensor([1.0, float(config["positive_class_weight"])], dtype=torch.float32, device=device)
     )
+    train_idx_tensor = torch.as_tensor(train_idx, dtype=torch.long, device=device)
+    if isinstance(train_data, HeteroData):
+        train_edge_uid = train_loader.data[FORWARD_RELATION].edge_attr[:, 0].long().to(device, non_blocking=True)
+    else:
+        train_edge_uid = train_loader.data.edge_attr[:, 0].long().to(device, non_blocking=True)
+    amp_enabled, amp_dtype = autocast_settings(device)
+    scaler = torch.cuda.amp.GradScaler(enabled=amp_enabled and amp_dtype == torch.float16)
+    logger.info("Mixed precision enabled=%s dtype=%s", amp_enabled, amp_dtype)
 
     best_state = None
     best_val_f1 = -1.0
@@ -1116,44 +1169,76 @@ def train_one_model(model_name: str, config: dict, train_data, val_data, test_da
 
     for epoch in range(config["epochs"]):
         model.train()
-        total_loss = 0.0
+        total_loss = torch.zeros((), device=device)
         total_examples = 0
         epoch_started_at = time.perf_counter()
+        last_batch_finished_at = epoch_started_at
         logger.info("epoch=%s starting training batches", epoch + 1)
 
         for batch_index, batch in enumerate(train_loader, start=1):
-            optimizer.zero_grad()
+            batch_received_at = time.perf_counter()
+            sample_elapsed = batch_received_at - last_batch_finished_at
+            optimizer.zero_grad(set_to_none=True)
             if isinstance(train_data, HeteroData):
-                mask = mask_seed_edges_hetero(batch, train_loader.data[FORWARD_RELATION].edge_attr, train_idx)
-                batch = batch.to(device)
+                node_count, edge_count = count_batch_nodes_edges(batch)
+                transfer_started_at = time.perf_counter()
+                batch = batch.to(device, non_blocking=True)
+                transfer_elapsed = time.perf_counter() - transfer_started_at
+                mask = mask_seed_edges_hetero(batch, train_edge_uid, train_idx_tensor)
+                mask_elapsed = time.perf_counter() - batch_received_at - transfer_elapsed
                 batch[FORWARD_RELATION].edge_attr = batch[FORWARD_RELATION].edge_attr[:, 1:]
                 batch[REVERSE_RELATION].edge_attr = batch[REVERSE_RELATION].edge_attr[:, 1:]
-                logits = model(batch.x_dict, batch.edge_index_dict, batch.edge_attr_dict)[FORWARD_RELATION]
-                pred = logits[mask.to(device)]
-                truth = batch[FORWARD_RELATION].y[mask.to(device)]
+                compute_started_at = time.perf_counter()
+                context = torch.autocast("cuda", dtype=amp_dtype) if amp_enabled else nullcontext()
+                with context:
+                    logits = model(batch.x_dict, batch.edge_index_dict, batch.edge_attr_dict)[FORWARD_RELATION]
+                    pred = logits[mask]
+                    truth = batch[FORWARD_RELATION].y[mask]
+                    loss = loss_fn(pred, truth)
             else:
-                mask = mask_seed_edges_homo(batch, train_loader.data.edge_attr, train_idx)
-                batch = batch.to(device)
+                node_count, edge_count = count_batch_nodes_edges(batch)
+                transfer_started_at = time.perf_counter()
+                batch = batch.to(device, non_blocking=True)
+                transfer_elapsed = time.perf_counter() - transfer_started_at
+                mask = mask_seed_edges_homo(batch, train_edge_uid, train_idx_tensor)
+                mask_elapsed = time.perf_counter() - batch_received_at - transfer_elapsed
                 batch.edge_attr = batch.edge_attr[:, 1:]
-                logits = model(batch.x, batch.edge_index, batch.edge_attr)
-                pred = logits[mask.to(device)]
-                truth = batch.y[mask.to(device)]
+                compute_started_at = time.perf_counter()
+                context = torch.autocast("cuda", dtype=amp_dtype) if amp_enabled else nullcontext()
+                with context:
+                    logits = model(batch.x, batch.edge_index, batch.edge_attr)
+                    pred = logits[mask]
+                    truth = batch.y[mask]
+                    loss = loss_fn(pred, truth)
 
-            loss = loss_fn(pred, truth)
-            loss.backward()
-            optimizer.step()
-            total_loss += float(loss) * pred.numel()
+            if scaler.is_enabled():
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                loss.backward()
+                optimizer.step()
+            compute_elapsed = time.perf_counter() - compute_started_at
+            total_loss += loss.detach() * pred.numel()
             total_examples += pred.numel()
             if batch_index == 1 or (log_every_batches > 0 and batch_index % log_every_batches == 0):
+                loss_value = float(loss.detach().cpu())
                 logger.info(
-                    "epoch=%s batch=%s/%s loss=%.6f examples=%s elapsed_sec=%.1f",
+                    "epoch=%s batch=%s/%s loss=%.6f seed_edges=%s sampled_nodes=%s sampled_edges=%s sample_sec=%.2f mask_sec=%.2f transfer_sec=%.2f compute_sec=%.2f elapsed_sec=%.1f",
                     epoch + 1,
                     batch_index,
                     len(train_loader),
-                    float(loss),
+                    loss_value,
                     int(pred.numel()),
+                    node_count,
+                    edge_count,
+                    sample_elapsed,
+                    mask_elapsed,
+                    transfer_elapsed,
+                    compute_elapsed,
                     time.perf_counter() - epoch_started_at,
                 )
+            last_batch_finished_at = time.perf_counter()
 
         logger.info("epoch=%s starting validation", epoch + 1)
         if isinstance(val_data, HeteroData):
@@ -1164,7 +1249,7 @@ def train_one_model(model_name: str, config: dict, train_data, val_data, test_da
         logger.info(
             "epoch=%s loss=%.6f val_f1=%.6f val_pr_auc=%.6f",
             epoch + 1,
-            total_loss / max(total_examples, 1),
+            float((total_loss / max(total_examples, 1)).detach().cpu()),
             val_metrics["f1"],
             val_metrics["pr_auc"],
         )
