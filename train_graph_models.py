@@ -20,6 +20,7 @@ from sklearn.metrics import (
     average_precision_score,
     confusion_matrix,
     f1_score,
+    precision_recall_curve,
     precision_score,
     recall_score,
     roc_auc_score,
@@ -36,6 +37,7 @@ from torch_geometric.nn import (
     to_hetero,
 )
 from torch_geometric.utils import degree
+from tqdm.auto import tqdm
 
 
 FORWARD_RELATION = ("node", "to", "node")
@@ -60,12 +62,65 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         help="Override num_neighbors from the JSON config, e.g. --num-neighbors 10 10.",
     )
+    parser.add_argument(
+        "--model",
+        "--models",
+        dest="models",
+        nargs="+",
+        choices=["gin", "gat", "pna", "rgcn"],
+        help="Train only the selected model(s), e.g. --model gin or --models gin pna.",
+    )
+    parser.add_argument(
+        "--output-root",
+        help="Override output_root from the JSON config.",
+    )
+    parser.add_argument(
+        "--experiment-name",
+        help="Override experiment_name from the JSON config.",
+    )
+    parser.add_argument(
+        "--processed-graph-path",
+        help="Override processed_graph_path from the JSON config.",
+    )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        help="Override DataLoader worker count. Use 0 to avoid worker crashes.",
+    )
+    parser.add_argument(
+        "--negative-sample-ratio",
+        type=float,
+        help="Override balanced-loss negative_sample_ratio from the JSON config.",
+    )
     return parser.parse_args()
 
 
 def read_config(config_path: str) -> dict:
     with Path(config_path).open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def apply_cli_overrides(config: dict, args: argparse.Namespace) -> dict:
+    if args.batch_size is not None:
+        config["batch_size"] = args.batch_size
+    if args.num_neighbors is not None:
+        config["num_neighbors"] = args.num_neighbors
+    if args.output_root is not None:
+        config["output_root"] = args.output_root
+    if args.experiment_name is not None:
+        config["experiment_name"] = args.experiment_name
+    if args.processed_graph_path is not None:
+        config["processed_graph_path"] = args.processed_graph_path
+    if args.num_workers is not None:
+        config["num_workers"] = args.num_workers
+    if args.negative_sample_ratio is not None:
+        config["negative_sample_ratio"] = args.negative_sample_ratio
+    if args.models is not None:
+        config["models"] = {
+            model_name: {"enabled": model_name in args.models}
+            for model_name in ["gin", "gat", "pna", "rgcn"]
+        }
+    return config
 
 
 def normalize_token(value):
@@ -140,6 +195,35 @@ def build_feature_frame(frame: pd.DataFrame, drop_columns: list[str]) -> pd.Data
     features = pd.get_dummies(features, dummy_na=True)
     features = features.apply(pd.to_numeric, errors="coerce").fillna(0.0)
     return features
+
+
+def build_node_features(nodes: pd.DataFrame, node_ids: list[str], config: dict) -> tuple[torch.Tensor, list[str]]:
+    if not config.get("use_node_features", True):
+        return torch.ones((len(node_ids), 1), dtype=torch.float32), ["bias"]
+
+    node_frame = nodes.copy()
+    node_frame["node_id"] = node_frame["node_id"].astype(str)
+    if "creation_date" in node_frame.columns:
+        created_at = pd.to_datetime(node_frame["creation_date"], errors="coerce")
+        node_frame["creation_year"] = created_at.dt.year
+        node_frame["creation_month"] = created_at.dt.month
+    for column in ["is_high_risk_category", "is_high_risk_country"]:
+        if column in node_frame.columns:
+            node_frame[column] = parse_bool_series(node_frame[column])
+
+    drop_columns = [
+        "node_id",
+        "name",
+        "creation_date",
+        # Avoid feeding an entity fraud label into transaction fraud prediction by default.
+        "is_fraudulent",
+    ]
+    drop_columns.extend(config.get("drop_node_feature_columns", []))
+    feature_frame = build_feature_frame(node_frame, drop_columns=drop_columns)
+    feature_frame.insert(0, "bias", 1.0)
+    feature_frame.index = node_frame["node_id"]
+    aligned = feature_frame.reindex(node_ids, fill_value=0.0)
+    return torch.tensor(aligned.to_numpy(dtype=np.float32), dtype=torch.float32), aligned.columns.astype(str).tolist()
 
 
 def select_temporal_split_days(timestamps: np.ndarray) -> tuple[list[int], list[int], list[int]]:
@@ -271,7 +355,7 @@ def build_base_graph(config: dict) -> tuple[Data, pd.DataFrame]:
     transactions["src_index"] = transactions["src"].astype(str).map(node_to_index).astype(int)
     transactions["dest_index"] = transactions["dest"].astype(str).map(node_to_index).astype(int)
 
-    x = torch.ones((len(node_ids), 1), dtype=torch.float32)
+    x, node_feature_names = build_node_features(nodes, node_ids, config)
     edge_index = torch.tensor(
         transactions[["src_index", "dest_index"]].to_numpy().T,
         dtype=torch.long,
@@ -306,6 +390,7 @@ def build_base_graph(config: dict) -> tuple[Data, pd.DataFrame]:
         y=edge_label,
         timestamps=timestamps,
         edge_uid=torch.tensor(transactions["edge_uid"].to_numpy(), dtype=torch.long),
+        node_feature_names=node_feature_names,
     )
     return data, transactions
 
@@ -478,14 +563,20 @@ def load_or_build_base_graph(config: dict) -> tuple[Data, pd.DataFrame]:
         if cache_path.exists():
             print(f"[graph-data] loading cached graph from {cache_path}", flush=True)
             payload = load_torch_artifact(cache_path)
-            return payload["data"], payload["transactions"]
+            data = payload["data"]
+            cache_version = payload.get("cache_version")
+            expected_cache_version = int(config.get("graph_cache_version", 2 if config.get("use_node_features", True) else 1))
+            if cache_version == expected_cache_version:
+                return data, payload["transactions"]
+            print("[graph-data] cached graph schema is stale; rebuilding", flush=True)
 
     data, transactions = build_base_graph(config)
 
     if cache_path_raw:
         cache_path = Path(cache_path_raw)
         print(f"[graph-data] saving cached graph to {cache_path}", flush=True)
-        save_torch_artifact({"data": data, "transactions": transactions}, cache_path)
+        cache_version = int(config.get("graph_cache_version", 2 if config.get("use_node_features", True) else 1))
+        save_torch_artifact({"data": data, "transactions": transactions, "cache_version": cache_version}, cache_path)
 
     return data, transactions
 
@@ -495,15 +586,28 @@ def load_or_build_full_hetero_graph(config: dict) -> tuple[HeteroData, dict[str,
     if cache_path_raw:
         cache_path = Path(cache_path_raw)
         if cache_path.exists():
-            print(f"[full-hetero] loading cached graph from {cache_path}")
+            print(f"[full-hetero] loading cached graph from {cache_path}", flush=True)
             payload = load_torch_artifact(cache_path)
+            if not isinstance(payload, dict):
+                raise ValueError(f"Cached full hetero graph at {cache_path} is not a dict payload.")
+            missing_keys = {"hetero", "metadata"} - set(payload)
+            if missing_keys:
+                raise ValueError(
+                    f"Cached full hetero graph at {cache_path} is missing keys: "
+                    + ", ".join(sorted(missing_keys))
+                )
+            metadata = payload["metadata"]
+            if not metadata.get("transaction_relations"):
+                raise ValueError(
+                    f"Cached full hetero graph at {cache_path} has no transaction_relations."
+                )
             return payload["hetero"], payload["metadata"]
 
     hetero, metadata = build_full_hetero_graph(config)
 
     if cache_path_raw:
         cache_path = Path(cache_path_raw)
-        print(f"[full-hetero] saving cached graph to {cache_path}")
+        print(f"[full-hetero] saving cached graph to {cache_path}", flush=True)
         save_torch_artifact({"hetero": hetero, "metadata": metadata}, cache_path)
 
     return hetero, metadata
@@ -1082,7 +1186,16 @@ def evaluate_hetero(model, loader, split_indices: np.ndarray, device):
     return y_true, y_pred, y_prob, edge_uids
 
 
-def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_prob: np.ndarray) -> dict[str, float]:
+def best_f1_threshold(y_true: np.ndarray, y_prob: np.ndarray) -> float:
+    precision, recall, thresholds = precision_recall_curve(y_true, y_prob)
+    if thresholds.size == 0:
+        return 0.5
+    f1 = 2 * precision[:-1] * recall[:-1] / np.maximum(precision[:-1] + recall[:-1], 1e-12)
+    return float(thresholds[int(np.nanargmax(f1))])
+
+
+def compute_metrics(y_true: np.ndarray, y_prob: np.ndarray, threshold: float = 0.5) -> dict[str, float]:
+    y_pred = (y_prob >= threshold).astype(np.int64)
     return {
         "accuracy": float(accuracy_score(y_true, y_pred)),
         "precision": float(precision_score(y_true, y_pred, zero_division=0)),
@@ -1090,7 +1203,23 @@ def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_prob: np.ndarray) 
         "f1": float(f1_score(y_true, y_pred, zero_division=0)),
         "pr_auc": float(average_precision_score(y_true, y_prob)),
         "roc_auc": float(roc_auc_score(y_true, y_prob)),
+        "threshold": float(threshold),
     }
+
+
+def balanced_loss_subset(truth: torch.Tensor, negative_ratio: int | float | None) -> torch.Tensor:
+    if not negative_ratio or negative_ratio <= 0:
+        return torch.ones_like(truth, dtype=torch.bool)
+    positive_idx = torch.nonzero(truth == 1, as_tuple=False).flatten()
+    negative_idx = torch.nonzero(truth == 0, as_tuple=False).flatten()
+    if positive_idx.numel() == 0 or negative_idx.numel() == 0:
+        return torch.ones_like(truth, dtype=torch.bool)
+    max_negatives = min(negative_idx.numel(), int(max(1, round(float(negative_ratio) * positive_idx.numel()))))
+    sampled_negatives = negative_idx[torch.randperm(negative_idx.numel(), device=truth.device)[:max_negatives]]
+    mask = torch.zeros_like(truth, dtype=torch.bool)
+    mask[positive_idx] = True
+    mask[sampled_negatives] = True
+    return mask
 
 
 def save_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, output_path: Path) -> None:
@@ -1170,52 +1299,53 @@ def train_one_model(model_name: str, config: dict, train_data, val_data, test_da
 
     best_state = None
     best_val_f1 = -1.0
-    log_every_batches = int(config.get("log_every_batches", 10))
+    best_threshold = 0.5
+    best_epoch = 0
+    epochs_without_improvement = 0
+    early_stopping_patience = int(config.get("early_stopping_patience", 0))
+    early_stopping_min_delta = float(config.get("early_stopping_min_delta", 0.0))
     checkpoint_every_epochs = int(config.get("checkpoint_every_epochs", 2))
+    use_tqdm = bool(config.get("use_tqdm", True))
+    negative_sample_ratio = config.get("negative_sample_ratio")
 
     for epoch in range(config["epochs"]):
         model.train()
         total_loss = torch.zeros((), device=device)
         total_examples = 0
-        epoch_started_at = time.perf_counter()
-        last_batch_finished_at = epoch_started_at
         logger.info("epoch=%s starting training batches", epoch + 1)
 
-        for batch_index, batch in enumerate(train_loader, start=1):
-            batch_received_at = time.perf_counter()
-            sample_elapsed = batch_received_at - last_batch_finished_at
+        epoch_batches = tqdm(
+            train_loader,
+            desc=f"{model_name} epoch {epoch + 1}/{config['epochs']}",
+            unit="batch",
+            leave=False,
+            disable=not use_tqdm,
+        )
+        for batch in epoch_batches:
             optimizer.zero_grad(set_to_none=True)
             if isinstance(train_data, HeteroData):
-                node_count, edge_count = count_batch_nodes_edges(batch)
-                transfer_started_at = time.perf_counter()
                 batch = batch.to(device, non_blocking=True)
-                transfer_elapsed = time.perf_counter() - transfer_started_at
                 mask = mask_seed_edges_hetero(batch, train_edge_uid, train_idx_tensor)
-                mask_elapsed = time.perf_counter() - batch_received_at - transfer_elapsed
                 batch[FORWARD_RELATION].edge_attr = batch[FORWARD_RELATION].edge_attr[:, 1:]
                 batch[REVERSE_RELATION].edge_attr = batch[REVERSE_RELATION].edge_attr[:, 1:]
-                compute_started_at = time.perf_counter()
                 context = torch.autocast("cuda", dtype=amp_dtype) if amp_enabled else nullcontext()
                 with context:
                     logits = model(batch.x_dict, batch.edge_index_dict, batch.edge_attr_dict)[FORWARD_RELATION]
                     pred = logits[mask]
                     truth = batch[FORWARD_RELATION].y[mask]
-                    loss = loss_fn(pred, truth)
+                    loss_mask = balanced_loss_subset(truth, negative_sample_ratio)
+                    loss = loss_fn(pred[loss_mask], truth[loss_mask])
             else:
-                node_count, edge_count = count_batch_nodes_edges(batch)
-                transfer_started_at = time.perf_counter()
                 batch = batch.to(device, non_blocking=True)
-                transfer_elapsed = time.perf_counter() - transfer_started_at
                 mask = mask_seed_edges_homo(batch, train_edge_uid, train_idx_tensor)
-                mask_elapsed = time.perf_counter() - batch_received_at - transfer_elapsed
                 batch.edge_attr = batch.edge_attr[:, 1:]
-                compute_started_at = time.perf_counter()
                 context = torch.autocast("cuda", dtype=amp_dtype) if amp_enabled else nullcontext()
                 with context:
                     logits = model(batch.x, batch.edge_index, batch.edge_attr)
                     pred = logits[mask]
                     truth = batch.y[mask]
-                    loss = loss_fn(pred, truth)
+                    loss_mask = balanced_loss_subset(truth, negative_sample_ratio)
+                    loss = loss_fn(pred[loss_mask], truth[loss_mask])
 
             if scaler.is_enabled():
                 scaler.scale(loss).backward()
@@ -1224,40 +1354,24 @@ def train_one_model(model_name: str, config: dict, train_data, val_data, test_da
             else:
                 loss.backward()
                 optimizer.step()
-            compute_elapsed = time.perf_counter() - compute_started_at
             total_loss += loss.detach() * pred.numel()
             total_examples += pred.numel()
-            if batch_index == 1 or (log_every_batches > 0 and batch_index % log_every_batches == 0):
-                loss_value = float(loss.detach().cpu())
-                logger.info(
-                    "epoch=%s batch=%s/%s loss=%.6f seed_edges=%s sampled_nodes=%s sampled_edges=%s sample_sec=%.2f mask_sec=%.2f transfer_sec=%.2f compute_sec=%.2f elapsed_sec=%.1f",
-                    epoch + 1,
-                    batch_index,
-                    len(train_loader),
-                    loss_value,
-                    int(pred.numel()),
-                    node_count,
-                    edge_count,
-                    sample_elapsed,
-                    mask_elapsed,
-                    transfer_elapsed,
-                    compute_elapsed,
-                    time.perf_counter() - epoch_started_at,
-                )
-            last_batch_finished_at = time.perf_counter()
+            epoch_batches.set_postfix(seed_edges=int(pred.numel()))
 
         logger.info("epoch=%s starting validation", epoch + 1)
         if isinstance(val_data, HeteroData):
             y_true, y_pred, y_prob, _ = evaluate_hetero(model, val_loader, val_idx, device)
         else:
             y_true, y_pred, y_prob, _ = evaluate_homo(model, val_loader, val_idx, device)
-        val_metrics = compute_metrics(y_true, y_pred, y_prob)
+        val_threshold = best_f1_threshold(y_true, y_prob)
+        val_metrics = compute_metrics(y_true, y_prob, val_threshold)
         logger.info(
-            "epoch=%s loss=%.6f val_f1=%.6f val_pr_auc=%.6f",
+            "epoch=%s loss=%.6f val_f1=%.6f val_pr_auc=%.6f val_threshold=%.6f",
             epoch + 1,
             float((total_loss / max(total_examples, 1)).detach().cpu()),
             val_metrics["f1"],
             val_metrics["pr_auc"],
+            val_metrics["threshold"],
         )
 
         if checkpoint_every_epochs > 0 and (epoch + 1) % checkpoint_every_epochs == 0:
@@ -1274,18 +1388,51 @@ def train_one_model(model_name: str, config: dict, train_data, val_data, test_da
             )
             logger.info("saved checkpoint=%s", checkpoint_path)
 
-        if val_metrics["f1"] > best_val_f1:
+        if val_metrics["f1"] > best_val_f1 + early_stopping_min_delta:
             best_val_f1 = val_metrics["f1"]
+            best_threshold = val_threshold
+            best_epoch = epoch + 1
+            epochs_without_improvement = 0
             best_state = {key: value.detach().cpu() for key, value in model.state_dict().items()}
+            best_checkpoint_path = model_dir / "best_checkpoint.pt"
+            save_model_checkpoint(
+                {
+                    "model_name": model_name,
+                    "epoch": best_epoch,
+                    "state_dict": best_state,
+                    "config": config,
+                    "validation_metrics": val_metrics,
+                    "threshold": best_threshold,
+                },
+                best_checkpoint_path,
+            )
+            logger.info("saved best_checkpoint=%s", best_checkpoint_path)
+        else:
+            epochs_without_improvement += 1
+            if early_stopping_patience > 0 and epochs_without_improvement >= early_stopping_patience:
+                logger.info(
+                    "early stopping at epoch=%s best_epoch=%s best_val_f1=%.6f",
+                    epoch + 1,
+                    best_epoch,
+                    best_val_f1,
+                )
+                break
 
     if best_state is not None:
         model.load_state_dict(best_state)
+
+    if isinstance(val_data, HeteroData):
+        val_true, _, val_prob, val_edge_uids = evaluate_hetero(model, val_loader, val_idx, device)
+    else:
+        val_true, _, val_prob, val_edge_uids = evaluate_homo(model, val_loader, val_idx, device)
+    val_pred = (val_prob >= best_threshold).astype(np.int64)
 
     if isinstance(test_data, HeteroData):
         y_true, y_pred, y_prob, edge_uids = evaluate_hetero(model, test_loader, test_idx, device)
     else:
         y_true, y_pred, y_prob, edge_uids = evaluate_homo(model, test_loader, test_idx, device)
-    metrics = compute_metrics(y_true, y_pred, y_prob)
+    y_pred = (y_prob >= best_threshold).astype(np.int64)
+    metrics = compute_metrics(y_true, y_prob, best_threshold)
     logger.info("test_metrics=%s", json.dumps(metrics))
 
     model_dir.mkdir(parents=True, exist_ok=True)
@@ -1294,6 +1441,7 @@ def train_one_model(model_name: str, config: dict, train_data, val_data, test_da
             "model_name": model_name,
             "state_dict": {key: value.numpy() for key, value in model.state_dict().items()},
             "config": config,
+            "threshold": best_threshold,
         },
         model_dir / "model.joblib",
     )
@@ -1304,6 +1452,12 @@ def train_one_model(model_name: str, config: dict, train_data, val_data, test_da
     prediction_rows["y_pred"] = y_pred
     prediction_rows["fraud_score"] = y_prob
     prediction_rows.to_csv(model_dir / "test_predictions.csv", index=False)
+    validation_rows = transactions.set_index("edge_uid").loc[val_edge_uids].reset_index()
+    validation_rows = validation_rows[["edge_uid", "src", "dest", "timestamp"]].copy()
+    validation_rows["y_true"] = val_true
+    validation_rows["y_pred"] = val_pred
+    validation_rows["fraud_score"] = val_prob
+    validation_rows.to_csv(model_dir / "validation_predictions.csv", index=False)
     save_json(metrics, model_dir / "test_metrics.json")
     save_confusion_matrix(y_true, y_pred, model_dir / "confusion_matrix.png")
     logger.info("Finished %s", model_name)
@@ -1312,10 +1466,7 @@ def train_one_model(model_name: str, config: dict, train_data, val_data, test_da
 def main() -> None:
     args = parse_args()
     config = read_config(args.config)
-    if args.batch_size is not None:
-        config["batch_size"] = args.batch_size
-    if args.num_neighbors is not None:
-        config["num_neighbors"] = args.num_neighbors
+    config = apply_cli_overrides(config, args)
     train_data, val_data, test_data, train_idx, val_idx, test_idx, transactions = build_datasets(config)
     for model_name, model_config in config["models"].items():
         if model_config.get("enabled", True):

@@ -1,0 +1,597 @@
+{
+  "folder_sizes_observed": {
+    "outputs/classical_models": "2.9G",
+    "outputs/early_fraud_forecasting": "4.6G",
+    "outputs/early_fraud_forecasting_graph_embeddings": "6.8G",
+    "outputs/early_fraud_forecasting_graph_embeddings_boosted": "8.5G",
+    "outputs/full_hetero_graph_models": "2.0G",
+    "outputs/graph_models": "5.7G"
+  },
+  "generated_date": "2026-08-12",
+  "notes": [
+    "Hetero individual__transacts_to__account F1=1.0 is not meaningful: only 30 all-positive rows.",
+    "Old graph runs may have metrics only in training.log because earlier artifact saving crashed.",
+    "HI PNA had started but had no completed test metrics at archive time.",
+    "Threshold reports were not present under outputs at archive time."
+  ],
+  "runs": [
+    {
+      "metrics": {
+        "predicted_anomalies": 0,
+        "test_rows": 957885
+      },
+      "path": "outputs/classical_models/li_classical_tabular/isolation_forest/test_metrics.json",
+      "source": "test_metrics.json"
+    },
+    {
+      "metrics": {
+        "accuracy": 0.9366040808656572,
+        "f1": 0.1098504837291117,
+        "pr_auc": 0.05202411408389894,
+        "precision": 0.059800823518146126,
+        "recall": 0.6736785329018339,
+        "roc_auc": 0.9459204648158398
+      },
+      "path": "outputs/classical_models/li_classical_tabular/logistic_regression/test_metrics.json",
+      "source": "test_metrics.json"
+    },
+    {
+      "metrics": {
+        "accuracy": 0.993594220600594,
+        "f1": 0.025412960609911054,
+        "pr_auc": 0.10020705620324996,
+        "precision": 0.10899182561307902,
+        "recall": 0.01438331535418914,
+        "roc_auc": 0.9609916788787193
+      },
+      "path": "outputs/classical_models/li_classical_tabular/random_forest/test_metrics.json",
+      "source": "test_metrics.json"
+    },
+    {
+      "metrics": {
+        "accuracy": 0.9941663143279204,
+        "f1": 0.05191720393620631,
+        "pr_auc": 0.7496083232960611,
+        "precision": 0.4608433734939759,
+        "recall": 0.02750809061488673,
+        "roc_auc": 0.9983313019656577
+      },
+      "path": "outputs/classical_models/li_classical_tabular/xgboost/test_metrics.json",
+      "source": "test_metrics.json"
+    },
+    {
+      "metrics": {
+        "accuracy": 0.9933359749665178,
+        "f1": 0.0,
+        "pr_auc": 0.006131231772742164,
+        "precision": 0.0,
+        "predicted_positive_rows": 0,
+        "recall": 0.0,
+        "roc_auc": 0.4830488158999526,
+        "test_positive_rows": 6374,
+        "test_rows": 956479,
+        "threshold_metrics": {
+          "0.1": {
+            "f1": 0.0,
+            "flagged_rows": 0,
+            "precision": 0.0,
+            "recall": 0.0
+          },
+          "0.25": {
+            "f1": 0.0,
+            "flagged_rows": 0,
+            "precision": 0.0,
+            "recall": 0.0
+          },
+          "0.5": {
+            "f1": 0.0,
+            "flagged_rows": 0,
+            "precision": 0.0,
+            "recall": 0.0
+          },
+          "0.75": {
+            "f1": 0.0,
+            "flagged_rows": 0,
+            "precision": 0.0,
+            "recall": 0.0
+          }
+        }
+      },
+      "path": "outputs/early_fraud_forecasting/li_early_fraud_forecast_30d/isolation_forest/test_metrics.json",
+      "source": "test_metrics.json"
+    },
+    {
+      "metrics": {
+        "accuracy": 0.7484868983009559,
+        "f1": 0.03824365437587204,
+        "pr_auc": 0.2534489683352124,
+        "precision": 0.019621839603871035,
+        "predicted_positive_rows": 243759,
+        "recall": 0.7503922183871979,
+        "roc_auc": 0.8139500735940822,
+        "test_positive_rows": 6374,
+        "test_rows": 956479,
+        "threshold_metrics": {
+          "0.1": {
+            "f1": 0.013356153948796507,
+            "flagged_rows": 945397,
+            "precision": 0.006723101511851634,
+            "recall": 0.9971760276121745
+          },
+          "0.25": {
+            "f1": 0.016811448936407174,
+            "flagged_rows": 711946,
+            "precision": 0.008480980299067626,
+            "recall": 0.9472858487605899
+          },
+          "0.5": {
+            "f1": 0.03824365437587204,
+            "flagged_rows": 243759,
+            "precision": 0.019621839603871035,
+            "recall": 0.7503922183871979
+          },
+          "0.75": {
+            "f1": 0.09721606781620268,
+            "flagged_rows": 45531,
+            "precision": 0.05541279567767016,
+            "recall": 0.39582679636021334
+          }
+        }
+      },
+      "path": "outputs/early_fraud_forecasting/li_early_fraud_forecast_30d/logistic_regression/test_metrics.json",
+      "source": "test_metrics.json"
+    },
+    {
+      "metrics": {
+        "accuracy": 0.9202042073061719,
+        "f1": 0.07974727805442686,
+        "pr_auc": 0.22439163904739604,
+        "precision": 0.04319318730979716,
+        "predicted_positive_rows": 76563,
+        "recall": 0.5188264825855036,
+        "roc_auc": 0.8090532929669242,
+        "test_positive_rows": 6374,
+        "test_rows": 956479,
+        "threshold_metrics": {
+          "0.1": {
+            "f1": 0.013305292162214348,
+            "flagged_rows": 951741,
+            "precision": 0.006697200183663413,
+            "recall": 1.0
+          },
+          "0.25": {
+            "f1": 0.01957666422568609,
+            "flagged_rows": 567166,
+            "precision": 0.00989833664218236,
+            "recall": 0.8807656102918104
+          },
+          "0.5": {
+            "f1": 0.07974727805442686,
+            "flagged_rows": 76563,
+            "precision": 0.04319318730979716,
+            "recall": 0.5188264825855036
+          },
+          "0.75": {
+            "f1": 0.4252168394330442,
+            "flagged_rows": 3080,
+            "precision": 0.6525974025974026,
+            "recall": 0.3153435833071854
+          }
+        }
+      },
+      "path": "outputs/early_fraud_forecasting/li_early_fraud_forecast_30d/random_forest/test_metrics.json",
+      "source": "test_metrics.json"
+    },
+    {
+      "metrics": {
+        "accuracy": 0.9945058908768515,
+        "f1": 0.47727046652740474,
+        "pr_auc": 0.21417315017365104,
+        "precision": 0.652079369393857,
+        "predicted_positive_rows": 3679,
+        "recall": 0.37637276435519296,
+        "roc_auc": 0.7328518109372772,
+        "test_positive_rows": 6374,
+        "test_rows": 956479,
+        "threshold_metrics": {
+          "0.1": {
+            "f1": 0.34662143059089623,
+            "flagged_rows": 7774,
+            "precision": 0.315410342166195,
+            "recall": 0.3846877941637904
+          },
+          "0.25": {
+            "f1": 0.45179319981369354,
+            "flagged_rows": 4361,
+            "precision": 0.5560651226782848,
+            "recall": 0.3804518355820521
+          },
+          "0.5": {
+            "f1": 0.47727046652740474,
+            "flagged_rows": 3679,
+            "precision": 0.652079369393857,
+            "recall": 0.37637276435519296
+          },
+          "0.75": {
+            "f1": 0.4694892882526145,
+            "flagged_rows": 3475,
+            "precision": 0.6653237410071943,
+            "recall": 0.36272356448070286
+          }
+        }
+      },
+      "path": "outputs/early_fraud_forecasting/li_early_fraud_forecast_30d/xgboost/test_metrics.json",
+      "source": "test_metrics.json"
+    },
+    {
+      "metrics": {
+        "accuracy": 0.9933359749665178,
+        "f1": 0.0,
+        "pr_auc": 0.008024602587884738,
+        "precision": 0.0,
+        "predicted_positive_rows": 0,
+        "recall": 0.0,
+        "roc_auc": 0.5370062657203675,
+        "test_positive_rows": 6374,
+        "test_rows": 956479,
+        "threshold_metrics": {
+          "0.1": {
+            "f1": 0.0,
+            "flagged_rows": 0,
+            "precision": 0.0,
+            "recall": 0.0
+          },
+          "0.25": {
+            "f1": 0.0,
+            "flagged_rows": 0,
+            "precision": 0.0,
+            "recall": 0.0
+          },
+          "0.5": {
+            "f1": 0.0,
+            "flagged_rows": 0,
+            "precision": 0.0,
+            "recall": 0.0
+          },
+          "0.75": {
+            "f1": 0.0,
+            "flagged_rows": 0,
+            "precision": 0.0,
+            "recall": 0.0
+          }
+        }
+      },
+      "path": "outputs/early_fraud_forecasting_graph_embeddings/li_early_fraud_forecast_30d_graph_embeddings/isolation_forest/test_metrics.json",
+      "source": "test_metrics.json"
+    },
+    {
+      "metrics": {
+        "accuracy": 0.8041368393869599,
+        "f1": 0.044203405049922706,
+        "pr_auc": 0.26708419434695707,
+        "precision": 0.022844607101234517,
+        "predicted_positive_rows": 189629,
+        "recall": 0.6796360213366802,
+        "roc_auc": 0.832386022493803,
+        "test_positive_rows": 6374,
+        "test_rows": 956479,
+        "threshold_metrics": {
+          "0.1": {
+            "f1": 0.013467206429641854,
+            "flagged_rows": 936509,
+            "precision": 0.006779432979287973,
+            "recall": 0.99607781612802
+          },
+          "0.25": {
+            "f1": 0.019312710973382767,
+            "flagged_rows": 608040,
+            "precision": 0.00975758173804355,
+            "recall": 0.9308126764982743
+          },
+          "0.5": {
+            "f1": 0.044203405049922706,
+            "flagged_rows": 189629,
+            "precision": 0.022844607101234517,
+            "recall": 0.6796360213366802
+          },
+          "0.75": {
+            "f1": 0.3490296803652968,
+            "flagged_rows": 7642,
+            "precision": 0.3200732792462706,
+            "recall": 0.38374647003451523
+          }
+        }
+      },
+      "path": "outputs/early_fraud_forecasting_graph_embeddings/li_early_fraud_forecast_30d_graph_embeddings/logistic_regression/test_metrics.json",
+      "source": "test_metrics.json"
+    },
+    {
+      "metrics": {
+        "accuracy": 0.9929742315304361,
+        "f1": 0.3920752668717206,
+        "pr_auc": 0.27260702326675446,
+        "precision": 0.46303418803418805,
+        "predicted_positive_rows": 4680,
+        "recall": 0.33997489802321934,
+        "roc_auc": 0.8603239380374201,
+        "test_positive_rows": 6374,
+        "test_rows": 956479,
+        "threshold_metrics": {
+          "0.1": {
+            "f1": 0.018596251163421413,
+            "flagged_rows": 642574,
+            "precision": 0.009390358153302188,
+            "recall": 0.9466582993410732
+          },
+          "0.25": {
+            "f1": 0.055855384446891754,
+            "flagged_rows": 157979,
+            "precision": 0.029054494584723287,
+            "recall": 0.720112958895513
+          },
+          "0.5": {
+            "f1": 0.3920752668717206,
+            "flagged_rows": 4680,
+            "precision": 0.46303418803418805,
+            "recall": 0.33997489802321934
+          },
+          "0.75": {
+            "f1": 0.42400939869699883,
+            "flagged_rows": 2989,
+            "precision": 0.664101706256273,
+            "recall": 0.3114213994352055
+          }
+        }
+      },
+      "path": "outputs/early_fraud_forecasting_graph_embeddings/li_early_fraud_forecast_30d_graph_embeddings/random_forest/test_metrics.json",
+      "source": "test_metrics.json"
+    },
+    {
+      "metrics": {
+        "accuracy": 0.9945456199247448,
+        "f1": 0.4804302360322677,
+        "pr_auc": 0.2880933938230259,
+        "precision": 0.657758385601309,
+        "predicted_positive_rows": 3667,
+        "recall": 0.3784122999686225,
+        "roc_auc": 0.7721947230917833,
+        "test_positive_rows": 6374,
+        "test_rows": 956479,
+        "threshold_metrics": {
+          "0.1": {
+            "f1": 0.44216216216216214,
+            "flagged_rows": 4726,
+            "precision": 0.5192551840880237,
+            "recall": 0.3850015688735488
+          },
+          "0.25": {
+            "f1": 0.47917485265225934,
+            "flagged_rows": 3806,
+            "precision": 0.6408302679978981,
+            "recall": 0.38264825855036083
+          },
+          "0.5": {
+            "f1": 0.4804302360322677,
+            "flagged_rows": 3667,
+            "precision": 0.657758385601309,
+            "recall": 0.3784122999686225
+          },
+          "0.75": {
+            "f1": 0.4787769060551197,
+            "flagged_rows": 3568,
+            "precision": 0.6670403587443946,
+            "recall": 0.3733919046124882
+          }
+        }
+      },
+      "path": "outputs/early_fraud_forecasting_graph_embeddings/li_early_fraud_forecast_30d_graph_embeddings/xgboost/test_metrics.json",
+      "source": "test_metrics.json"
+    },
+    {
+      "metrics": {
+        "test_accuracy": 0.9945539839348276,
+        "test_f1": 0.45981541014207195,
+        "test_positive_rows": 6374,
+        "test_pr_auc": 0.28913468491989175,
+        "test_precision": 0.6781890486387274,
+        "test_predicted_positive_rows": 3269,
+        "test_recall": 0.34781926576717914,
+        "test_roc_auc": 0.8675070718283219,
+        "test_rows": 956479,
+        "threshold_metrics": {
+          "0.05": {
+            "f1": 0.014867991048958982,
+            "flagged_rows": 840008,
+            "precision": 0.007490404853287112,
+            "recall": 0.9871352368999059
+          },
+          "0.1": {
+            "f1": 0.043457083457083455,
+            "flagged_rows": 246151,
+            "precision": 0.022291195241944985,
+            "recall": 0.8608409162221525
+          },
+          "0.25": {
+            "f1": 0.06144037096073033,
+            "flagged_rows": 131646,
+            "precision": 0.03220758701365784,
+            "recall": 0.6652023846877941
+          },
+          "0.5": {
+            "f1": 0.45435161853072303,
+            "flagged_rows": 3944,
+            "precision": 0.5943204868154158,
+            "recall": 0.36774395983683716
+          },
+          "0.75": {
+            "f1": 0.4317264812062009,
+            "flagged_rows": 3044,
+            "precision": 0.6678712220762155,
+            "recall": 0.318951992469407
+          }
+        },
+        "validation": {
+          "accuracy": 0.989091217039197,
+          "f1": 0.4132268586210775,
+          "positive_rows": 13638,
+          "pr_auc": 0.33850064530972646,
+          "precision": 0.8865830115830116,
+          "predicted_positive_rows": 4144,
+          "recall": 0.26939433934594514,
+          "roc_auc": 0.809559092613297,
+          "rows": 956477
+        },
+        "validation_best_f1_threshold": 0.5839556844372089
+      },
+      "path": "outputs/early_fraud_forecasting_graph_embeddings_boosted/li_early_fraud_forecast_30d_graph_embeddings_boosted_no_leakage/random_forest/test_metrics.json",
+      "source": "test_metrics.json"
+    },
+    {
+      "metrics": {
+        "test_accuracy": 0.9945383014159224,
+        "test_f1": 0.4847109883606234,
+        "test_positive_rows": 6374,
+        "test_pr_auc": 0.29613162130463655,
+        "test_precision": 0.6527630180658873,
+        "test_predicted_positive_rows": 3764,
+        "test_recall": 0.3854722309381864,
+        "test_roc_auc": 0.8352028591948254,
+        "test_rows": 956479,
+        "threshold_metrics": {
+          "0.05": {
+            "f1": 0.013310033798277648,
+            "flagged_rows": 949296,
+            "precision": 0.0066997016736613235,
+            "recall": 0.9978035770316912
+          },
+          "0.1": {
+            "f1": 0.013728888657214345,
+            "flagged_rows": 914458,
+            "precision": 0.00691229121512415,
+            "recall": 0.9916849701914026
+          },
+          "0.25": {
+            "f1": 0.0313883347302067,
+            "flagged_rows": 332478,
+            "precision": 0.015995043281059197,
+            "recall": 0.8343269532475682
+          },
+          "0.5": {
+            "f1": 0.05145074039669963,
+            "flagged_rows": 176636,
+            "precision": 0.026653683280871397,
+            "recall": 0.7386256667712582
+          },
+          "0.75": {
+            "f1": 0.33473980309423346,
+            "flagged_rows": 8557,
+            "precision": 0.29204160336566554,
+            "recall": 0.39206149984311267
+          }
+        },
+        "validation": {
+          "accuracy": 0.9895501930522114,
+          "f1": 0.42980204232985336,
+          "positive_rows": 13638,
+          "pr_auc": 0.3331325054742973,
+          "precision": 0.9681315857106142,
+          "predicted_positive_rows": 3891,
+          "recall": 0.2762135210441414,
+          "roc_auc": 0.7951931956086361,
+          "rows": 956477
+        },
+        "validation_best_f1_threshold": 0.9256640076637268
+      },
+      "path": "outputs/early_fraud_forecasting_graph_embeddings_boosted/li_early_fraud_forecast_30d_graph_embeddings_boosted_no_leakage/xgboost/test_metrics.json",
+      "source": "test_metrics.json"
+    },
+    {
+      "metrics": {
+        "accuracy": 0.00019894425864955379,
+        "f1": 0.00039780937540783324,
+        "pr_auc": 0.00019894425864955379,
+        "precision": 0.00019894425864955379,
+        "recall": 1.0,
+        "roc_auc": 0.5,
+        "threshold": 0.5076777338981628
+      },
+      "path": "outputs/full_hetero_graph_models/li_full_hetero_graph_tuned/account__transacts_to__account/test_metrics.json",
+      "source": "test_metrics.json"
+    },
+    {
+      "metrics": {
+        "accuracy": 1.0,
+        "f1": 1.0,
+        "pr_auc": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "roc_auc": "NaN",
+        "threshold": 1.0
+      },
+      "path": "outputs/full_hetero_graph_models/li_full_hetero_graph_tuned/individual__transacts_to__account/test_metrics.json",
+      "source": "test_metrics.json"
+    },
+    {
+      "metrics": {
+        "accuracy": 0.9997898136698183,
+        "f1": 0.3023255813953488,
+        "pr_auc": 0.2990222253316616,
+        "precision": 1.0,
+        "recall": 0.1780821917808219,
+        "roc_auc": 0.993439453060875,
+        "threshold": 0.9298009276390076
+      },
+      "path": "outputs/graph_models/li_gin_tuned/gin/training.log",
+      "source": "training.log:test_metrics"
+    },
+    {
+      "metrics": {
+        "accuracy": 0.9997617437554089,
+        "f1": 0.0,
+        "pr_auc": 0.0025965676578006613,
+        "precision": 0.0,
+        "recall": 0.0,
+        "roc_auc": 0.9227949293750283
+      },
+      "path": "outputs/graph_models/li_graph_models/gat/training.log",
+      "source": "training.log:test_metrics"
+    },
+    {
+      "metrics": {
+        "accuracy": 0.9998143542681005,
+        "f1": 0.4044943820224719,
+        "pr_auc": 0.3070796989959996,
+        "precision": 0.8181818181818182,
+        "recall": 0.26865671641791045,
+        "roc_auc": 0.9200221342076156
+      },
+      "path": "outputs/graph_models/li_graph_models/gin/training.log",
+      "source": "training.log:test_metrics"
+    },
+    {
+      "metrics": {
+        "accuracy": 0.9997953634070419,
+        "f1": 0.1875,
+        "pr_auc": 0.08008854334586801,
+        "precision": 0.42857142857142855,
+        "recall": 0.12,
+        "roc_auc": 0.9832363348670977
+      },
+      "path": "outputs/graph_models/li_graph_models/pna/training.log",
+      "source": "training.log:test_metrics"
+    },
+    {
+      "metrics": {
+        "accuracy": 0.9998563887731048,
+        "f1": 0.4383561643835616,
+        "pr_auc": 0.34124287727910446,
+        "precision": 0.8,
+        "recall": 0.3018867924528302,
+        "roc_auc": 0.991103638738472,
+        "threshold": 0.8347325325012207
+      },
+      "path": "outputs/graph_models/li_pna_tuned/pna/training.log",
+      "source": "training.log:test_metrics"
+    }
+  ]
+}

@@ -1,15 +1,18 @@
 {
-  "experiment_name": "li_graph_models",
+  "experiment_name": "li_graph_models_tuned",
   "transactions_path": "data/LI/generated_transactions.csv",
   "nodes_path": "data/LI/generated_nodes.csv",
   "output_root": "outputs/graph_models",
-  "processed_graph_path": "outputs/graph_models/li_graph_models/processed/base_graph.pt",
+  "processed_graph_path": "outputs/graph_models/li_graph_models_tuned/processed/base_graph.pt",
+  "graph_cache_version": 2,
   "batch_size": 8096,
   "num_neighbors": [
     50,
-    50 
+    25
   ],
-  "epochs": 10,
+  "epochs": 50,
+  "early_stopping_patience": 8,
+  "early_stopping_min_delta": 0.0,
   "learning_rate": 0.001,
   "weight_decay": 0.0001,
   "hidden_dim": 64,
@@ -18,10 +21,15 @@
   "dropout": 0.2,
   "final_dropout": 0.5,
   "positive_class_weight": 20.0,
+  "use_node_features": true,
   "use_ports": true,
   "use_time_deltas": true,
   "use_reverse_mp": true,
+  "checkpoint_every_epochs": 5,
   "models": {
+    "gin": {
+      "enabled": true
+    },
     "pna": {
       "enabled": true
     }

@@ -1,0 +1,62 @@
+{
+  "experiment_name": "hi_early_fraud_forecast_30d_graph_embeddings_boosted",
+  "transactions_path": "data/HI/generated_transactions.csv",
+  "nodes_path": "data/HI/generated_nodes.csv",
+  "output_root": "outputs/early_fraud_forecasting_graph_embeddings_boosted",
+  "processed_data_path": "outputs/early_fraud_forecasting_graph_embeddings_boosted/hi_early_fraud_forecast_30d_graph_embeddings_boosted/processed/features.pkl",
+  "processed_target_path": "outputs/early_fraud_forecasting_graph_embeddings_boosted/hi_early_fraud_forecast_30d_graph_embeddings_boosted/processed/target.pkl",
+  "processed_keys_path": "outputs/early_fraud_forecasting_graph_embeddings_boosted/hi_early_fraud_forecast_30d_graph_embeddings_boosted/processed/keys.pkl",
+  "entity_embeddings_path": "outputs/early_fraud_forecasting/graph_embeddings/hi_entity_embeddings.csv",
+  "graph_embeddings": {
+    "dimensions": 32,
+    "snapshot_frequency": "W",
+    "min_history_days": 7,
+    "weighting": "count",
+    "random_state": 42
+  },
+  "forecast_horizon_days": 30,
+  "include_current_fraud_observations": false,
+  "rebuild_processed": true,
+  "add_rolling_features": true,
+  "train_fraction": 0.7,
+  "validation_fraction": 0.15,
+  "score_thresholds": [0.05, 0.1, 0.25, 0.5, 0.75],
+  "experiments": [
+    {
+      "name": "hi_early_fraud_forecast_30d_graph_embeddings_boosted_no_leakage",
+      "drop_identifier_features": true,
+      "drop_leakage_features": true
+    }
+  ],
+  "models": {
+    "random_forest": {
+      "enabled": true,
+      "type": "supervised",
+      "params": {
+        "class_weight": "balanced_subsample",
+        "max_depth": 22,
+        "min_samples_leaf": 3,
+        "n_estimators": 350,
+        "n_jobs": -1,
+        "random_state": 42
+      }
+    },
+    "xgboost": {
+      "enabled": true,
+      "type": "supervised",
+      "params": {
+        "colsample_bytree": 0.85,
+        "eval_metric": "logloss",
+        "gamma": 0.5,
+        "learning_rate": 0.03,
+        "max_depth": 4,
+        "min_child_weight": 5,
+        "n_estimators": 650,
+        "random_state": 42,
+        "scale_pos_weight": "auto",
+        "subsample": 0.9,
+        "tree_method": "hist"
+      }
+    }
+  }
+}

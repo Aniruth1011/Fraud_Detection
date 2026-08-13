@@ -1,0 +1,87 @@
+{
+  "experiment_name": "li_early_fraud_forecast_30d_plain",
+  "transactions_path": "data/LI/generated_transactions.csv",
+  "nodes_path": "data/LI/generated_nodes.csv",
+  "output_root": "outputs/early_fraud_forecasting_plain",
+  "processed_data_path": "outputs/early_fraud_forecasting_plain/li_early_fraud_forecast_30d_plain/processed/features.pkl",
+  "processed_target_path": "outputs/early_fraud_forecasting_plain/li_early_fraud_forecast_30d_plain/processed/target.pkl",
+  "processed_keys_path": "outputs/early_fraud_forecasting_plain/li_early_fraud_forecast_30d_plain/processed/keys.pkl",
+  "forecast_horizon_days": 30,
+  "include_current_fraud_observations": false,
+  "rebuild_processed": false,
+  "train_fraction": 0.7,
+  "validation_fraction": 0.15,
+  "score_thresholds": [0.1, 0.25, 0.5, 0.75],
+  "experiments": [
+    {
+      "name": "li_early_fraud_forecast_30d_plain",
+      "drop_identifier_features": true,
+      "drop_leakage_features": false
+    },
+    {
+      "name": "li_early_fraud_forecast_30d_plain_no_leakage",
+      "drop_identifier_features": true,
+      "drop_leakage_features": true
+    }
+  ],
+  "models": {
+    "logistic_regression": {
+      "enabled": true,
+      "type": "supervised",
+      "params": {
+        "C": 1.0,
+        "class_weight": "balanced",
+        "max_iter": 1000,
+        "n_jobs": -1,
+        "solver": "saga"
+      }
+    },
+    "random_forest": {
+      "enabled": true,
+      "type": "supervised",
+      "params": {
+        "class_weight": "balanced_subsample",
+        "max_depth": 18,
+        "min_samples_leaf": 5,
+        "n_estimators": 250,
+        "n_jobs": -1,
+        "random_state": 42
+      }
+    },
+    "xgboost": {
+      "enabled": true,
+      "type": "supervised",
+      "params": {
+        "colsample_bytree": 0.8,
+        "eval_metric": "logloss",
+        "learning_rate": 0.05,
+        "max_depth": 6,
+        "n_estimators": 350,
+        "random_state": 42,
+        "subsample": 0.8,
+        "tree_method": "hist"
+      }
+    },
+    "isolation_forest": {
+      "enabled": true,
+      "type": "unsupervised",
+      "params": {
+        "contamination": "auto",
+        "max_samples": "auto",
+        "n_estimators": 250,
+        "n_jobs": -1,
+        "random_state": 42
+      }
+    },
+    "local_outlier_factor": {
+      "enabled": true,
+      "type": "unsupervised",
+      "params": {
+        "contamination": "auto",
+        "metric": "minkowski",
+        "n_neighbors": 35,
+        "novelty": true
+      }
+    }
+  }
+}

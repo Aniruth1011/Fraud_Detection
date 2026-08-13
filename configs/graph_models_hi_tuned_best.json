@@ -1,0 +1,43 @@
+{
+  "experiment_name": "hi_graph_models_tuned_best",
+  "transactions_path": "data/HI/generated_transactions.csv",
+  "nodes_path": "data/HI/generated_nodes.csv",
+  "output_root": "outputs/graph_models",
+  "processed_graph_path": "outputs/graph_models/hi_graph_models_tuned_best/processed/base_graph_no_leakage.pt",
+  "graph_cache_version": 3,
+  "batch_size": 8096,
+  "num_neighbors": [
+    50,
+    25
+  ],
+  "epochs": 50,
+  "early_stopping_patience": 8,
+  "early_stopping_min_delta": 0.0,
+  "learning_rate": 0.001,
+  "weight_decay": 0.0001,
+  "hidden_dim": 64,
+  "num_layers": 2,
+  "edge_updates": true,
+  "dropout": 0.2,
+  "final_dropout": 0.5,
+  "positive_class_weight": 12.0,
+  "use_node_features": true,
+  "drop_node_feature_columns": [
+    "risk_score",
+    "occupation",
+    "is_high_risk_category",
+    "is_high_risk_country"
+  ],
+  "use_ports": true,
+  "use_time_deltas": true,
+  "use_reverse_mp": true,
+  "checkpoint_every_epochs": 5,
+  "models": {
+    "gin": {
+      "enabled": true
+    },
+    "pna": {
+      "enabled": true
+    }
+  }
+}
