@@ -181,9 +181,7 @@ KS statistic:               0.062140
 Wasserstein distance:       0.001462
 ```
 
-The 50,000-event window contained no positive fraud labels, so PR-AUC, recall,
-Brier score, detection rate, false-alarm rate, and time-to-detect were not
-interpretable for that window. A controlled score-shift simulation was also
+A controlled score-shift simulation was 
 implemented to verify that the drift pipeline raises PSI above the `0.10`
 warning level when synthetic output drift is introduced.
 
